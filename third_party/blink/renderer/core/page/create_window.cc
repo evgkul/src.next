@@ -311,9 +311,15 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
   }
 
   const WebWindowFeatures& features = request.GetWindowFeatures();
-  request.SetNavigationPolicy(NavigationPolicyForCreateWindow(features));
-  probe::WindowOpen(&opener_window, url, frame_name, features,
-                    LocalFrame::HasTransientUserActivation(&opener_frame));
+  const auto& picture_in_picture_window_options =
+      request.GetPictureInPictureWindowOptions();
+  if (picture_in_picture_window_options.has_value()) {
+    request.SetNavigationPolicy(kNavigationPolicyPictureInPicture);
+  } else {
+    request.SetNavigationPolicy(NavigationPolicyForCreateWindow(features));
+    probe::WindowOpen(&opener_window, url, frame_name, features,
+                      LocalFrame::HasTransientUserActivation(&opener_frame));
+  }
 
   // Sandboxed frames cannot open new auxiliary browsing contexts.
   if (opener_window.IsSandboxed(
@@ -367,7 +373,7 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
 
   frame.View()->SetCanHaveScrollbars(features.scrollbars_visible);
 
-  IntRect window_rect = page->GetChromeClient().RootWindowRect(frame);
+  gfx::Rect window_rect = page->GetChromeClient().RootWindowRect(frame);
   if (features.x_set)
     window_rect.set_x(features.x);
   if (features.y_set)
@@ -377,10 +383,8 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
   if (features.height_set)
     window_rect.set_height(features.height);
 
-  IntRect rect = page->GetChromeClient().CalculateWindowRectWithAdjustment(
-      window_rect, frame, opener_frame);
-  page->GetChromeClient().Show(opener_frame.GetLocalFrameToken(),
-                               request.GetNavigationPolicy(), rect,
+  page->GetChromeClient().Show(frame, opener_frame,
+                               request.GetNavigationPolicy(), window_rect,
                                consumed_user_gesture);
   MaybeLogWindowOpen(opener_frame);
   return &frame;
